@@ -1,0 +1,7 @@
+android_backup==0.2.0
+cryptography==38.0.4
+opencv_python==4.6.0.66
+pandas==1.4.2
+Pillow==9.5.0
+reportlab==3.6.10
+streamlit==1.17.0

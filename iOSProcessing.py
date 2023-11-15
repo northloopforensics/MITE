@@ -116,11 +116,76 @@ def sqlite_run_datausage(datausagepath):
     connection = sqlite3.connect(datausagepath)
     cursor = connection.cursor()
     datausequery = """SELECT 
-                    ZLIVEUSAGE.ZTIMESTAMP, ZLIVEUSAGE.ZWIFIIN, 
-                    ZLIVEUSAGE.ZWIFIOUT, ZLIVEUSAGE.ZWWANIN, ZLIVEUSAGE.ZWWANOUT, 
-                    ZPROCESS.ZBUNDLENAME, ZPROCESS.ZPROCNAME 
+                    datetime('2001-01-01', ZLIVEUSAGE.ZTIMESTAMP || ' seconds') as 'Date (UTC)', 
+                    ZPROCESS.ZBUNDLENAME as 'Application Bundle', 
+					ZLIVEUSAGE.ZWIFIIN as 'WiFi In', 
+                    ZLIVEUSAGE.ZWIFIOUT as 'WiFi Out', 
+					ZLIVEUSAGE.ZWWANIN as 'WWAN In', 
+					ZLIVEUSAGE.ZWWANOUT as 'WWAN Out'
+                    
                     FROM ZLIVEUSAGE
                     LEFT JOIN ZPROCESS ON ZPROCESS.Z_PK = ZLIVEUSAGE.ZHASPROCESS"""
+    cursor.execute(datausequery)
+    results = cursor.fetchall()
+    connection.close()
+    return results
+
+def sqlite_run_callhistory(callhistorypath):
+    connection = sqlite3.connect(callhistorypath)
+    cursor = connection.cursor()
+    datausequery = """select 
+                        datetime('2001-01-01', zdate || ' seconds') as 'Date (UTC)',
+                        time(ZDURATION,'unixepoch') as 'Duration',
+                        ZADDRESS as 'Other Party',
+
+                        case ZORIGINATED 
+                            when 0 then 'Incoming'
+                            when 1 then 'Outgoing'
+                            end as 'Call Direction',
+                        case ZANSWERED
+                            when 0 then 'No'
+                            when 1 then 'Yes'
+                            end as 'Answered',
+
+                        case ZCALLTYPE -- 
+                            when 1 then 'Standard Call'
+                            when 8 then 'Facetime Video Call'
+                            when 16 then 'Facetime Audio Call'
+                            else ZCALLTYPE
+                            end as 'CallType' 
+
+                        from zcallrecord
+                        --where ZCALLTYPE = 8 filter by call type
+                        order by 'Date (UTC)' desc"""
+    cursor.execute(datausequery)
+    results = cursor.fetchall()
+    connection.close()
+    return results
+
+def sqlite_run_safarihistory(safarihistorypath):
+    connection = sqlite3.connect(safarihistorypath)
+    cursor = connection.cursor()
+    datausequery = """SELECT 
+                    datetime('2001-01-01', history_visits.visit_time || ' seconds') as 'Date (UTC)',
+                    history_visits.title as 'Page Title',
+                    history_items.url as 'URL',
+                    case history_visits.load_successful
+                        when 0 then 'No'
+                        when 1 then 'Yes'
+                        end "Page Loaded",
+                    history_items.visit_count as 'Total Visit Count'
+                    FROM history_visits LEFT JOIN history_items on history_items.id = history_visits.history_item"""
+    cursor.execute(datausequery)
+    results = cursor.fetchall()
+    connection.close()
+    return results
+def sqlite_run_TCC(TCCpath):
+    connection = sqlite3.connect(TCCpath)
+    cursor = connection.cursor()
+    datausequery = """SELECT
+                    access.service as 'Device Permission',                       
+                    ACCESS.client as 'Application Bundle'
+                    FROM access """
     cursor.execute(datausequery)
     results = cursor.fetchall()
     connection.close()
@@ -139,8 +204,8 @@ def retrieve_files_from_backup(backup_path, filedestination, password):
     # safari_sqlite = "e74113c185fd8297e140cfcf9c99436c5cc06b57"  ?
 
     list_of_fileIDs = ['12b144c0bd44f2b3dffd9186d3f9c05b917cee25', "0d609c54856a9bb2d56729df1d68f2958a88426b", "1a0e7afc19d307da602ccdcece51af33afe92c53" ,
-                    "31bb7ba8914766d4ba40d6dfb6113c8b614be442", "943624fd13e27b800cc6d9ce1100c22356ee365c", "992df473bbb9e132f4b3b6e4d33f72171e97bc7a", 
-                    "3d0d7e5fb2ce288813306e4d4636395e047a3d28", "64d0019cb3d46bfc8cce545a8ba54b93e7ea9347", "5a4935c78a5255723f707230a451d79c540d2741"]
+                    "31bb7ba8914766d4ba40d6dfb6113c8b614be442", "943624fd13e27b800cc6d9ce1100c22356ee365c",  "3d0d7e5fb2ce288813306e4d4636395e047a3d28", 
+                    "64d0019cb3d46bfc8cce545a8ba54b93e7ea9347", "5a4935c78a5255723f707230a451d79c540d2741"]
 
     backup = Backup.from_path(backup_path=backup_path, password=password)
     # try:
@@ -174,12 +239,30 @@ for artifact in recovered_files:
         # print(accountdata)
         accourntquery = sqlite_run_accounts3(accountdata)
         
+    
+    if "AddressBook.sqlitedb" in artifact:
+        accountdata = os.path.join(fileoutputdestination + '\\' + artifact)
+        addressquery = sqlite_run_addressbook(accountdata) 
+        # print(addressquery)
+    
+    if 'CallHistory.storedata' in artifact:
+        accountdata = os.path.join(fileoutputdestination + '\\' + artifact)
+        callquery = sqlite_run_callhistory(accountdata) 
+        # print(callquery)
+    if 'DataUsage.sqlite' in artifact:
+        accountdata = os.path.join(fileoutputdestination + '\\' + artifact)
+        datausequery = sqlite_run_datausage(accountdata) 
+        # print(datausequery)
+    if "History.db" in artifact:
+        accountdata = os.path.join(fileoutputdestination + '\\' + artifact)
+        safariquery = sqlite_run_safarihistory(accountdata) 
+        # print(safariquery)   
+    
     if "sms.db" in artifact:
         accountdata = os.path.join(fileoutputdestination + '\\' + artifact)
         smsquery = sqlite_run_SMS(accountdata) 
         # print(smsquery)
-    if "AddressBook.sqlitedb" in artifact:
+    if "TCC.db" in artifact:
         accountdata = os.path.join(fileoutputdestination + '\\' + artifact)
-        print(accountdata)
-        addressquery = sqlite_run_addressbook(accountdata) 
-        print(addressquery)
+        tccquery = sqlite_run_TCC(accountdata) 
+        print(tccquery)

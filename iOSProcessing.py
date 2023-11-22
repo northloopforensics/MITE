@@ -19,7 +19,7 @@ from reportlab.lib.enums import TA_LEFT, TA_RIGHT, TA_CENTER, TA_JUSTIFY
 from reportlab.pdfgen import canvas 
 from reportlab.platypus.flowables import KeepTogether
 
-start = time.process_time()
+start = time.process_time()   # for testing
 
 
     # Iterate over backup to find all image and video files. 
@@ -28,16 +28,18 @@ start = time.process_time()
     # Is there even a need to unpack the whole backup????
     # parse info.plist for report data
     # Safari history/download/autofill?
-
-fileoutputdestination = "D:\\TESTOUTPUT"
-photooutputdestination = fileoutputdestination + '\\Photos'
-backup_path = "D:\\MITE_Cases\\00008120-0016085A3A00C01E"
+reportoutputdestination = "D:\\TESTOUTPUT"
+fileoutputdestination = reportoutputdestination + "\\Artifacts"
+photooutputdestination = reportoutputdestination + '\\Photos'
+backup_path = "D:\\MITE_Cases\\TestRun_iPhone 12_Charlie Rubisoff_20231122141240\\Backups & Exports\\00008101-0008199926E9001E"
 info_plist_path = f'{backup_path}/Info.plist'
 password = "MITE"
-if os.path.isdir(fileoutputdestination) == False:
-    os.makedirs(fileoutputdestination)
+if os.path.isdir(reportoutputdestination) == False:
+    os.makedirs(reportoutputdestination)
 if os.path.isdir(photooutputdestination) == False:
     os.makedirs(photooutputdestination)
+if os.path.isdir(fileoutputdestination) == False:
+    os.makedirs(fileoutputdestination)
 
 phonetype = ""
 devicename = ""
@@ -64,7 +66,7 @@ taxonomy_Dict = {
 1447: "vehicle",
 1632: "weapon"
 }
-target = 'body_part'
+target = 'teen'
 
 list_of_paths = []
 now = datetime.now()
@@ -214,81 +216,21 @@ def make_landscape_report(outputfolder, report_title, sqlqueryresult, max_cell_w
     # Build the PDF
     doc.build(elements)
 
-# Example usage:
-# Assuming 'addressquery' is your SQL query result
 
-    
-    # # Start with raw text reports for large output
-
-    # # PDF REPORT STUFF
-    # pdfReportPages = outputfolder + "/MITE_iOS_Report_" + report_title + "_" + datetime.now().strftime("%Y%m%d%H%M%S") + ".pdf"
-    # doc = SimpleDocTemplate(pdfReportPages, pagesize=landscape(legal))
-
-    # # Container for the "Flowable" objects
-    # elements = []
-    # styles = getSampleStyleSheet()
-    # styles.add(ParagraphStyle(name='Table Normal', fontName='Helvetica', fontSize=8, leading=10,
-    #                           backColor=colors.white, textColor=colors.black, alignment=1))
-    # styleA = styles["Table Normal"]
-    # styleN = styles["BodyText"]
-    # styleH = styles["Heading1"]
-
-    # w, t, c = '100%', 2, 'darkgrey'
-
-    # # Add title and border
-    # elements.append(Paragraph("<i><font color='Darkslategray'>{}</font></i>".format(report_title), styleH))
-    # elements.append(HRFlowable(width=w, thickness=t, color=c, spaceBefore=2, vAlign='MIDDLE', lineCap='square'))
-
-    # # Add date/time
-    # elements.append(Paragraph("<i><font color='Darkslategray'>Date/Time: </font></i>" + datetime.now().strftime("%m/%d/%Y %H:%M:%S"), styleN))
-
-    # # Add border
-    # elements.append(HRFlowable(width=w, thickness=t, color=c, spaceBefore=2, vAlign='MIDDLE', lineCap='square'))
-
-    # # Add table title
-    # elements.append(Paragraph("<i><font color='Darkslategray'>Installed 3rd Party Applications on Device:</font></i>", styleN))
-
-    # # Create a table and add it to the elements
-    # table_data = [list(map(str, row)) for row in sqlqueryresult]
-    # table = Table(table_data)
-
-    # # Define the table style
-    # table_style = [
-    #     ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
-    #     ('TEXTCOLOR', (0, 0), (-1, 0), colors.darkslateblue),
-    #     ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-    #     ('FONTNAME', (0, 0), (-1, 0), 'Helvetica'),
-    #     ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-    #     ('BACKGROUND', (0, 1), (-1, -1), colors.white),
-    #     ('GRID', (0, 0), (-1, -1), 1, colors.black)
-    # ]
-
-    # # Apply the table style
-    # table.setStyle(table_style)
-    # elements.append(table)
-
-    # # Add border
-    # elements.append(HRFlowable(width=w, thickness=t, color=c, spaceBefore=2, vAlign='MIDDLE', lineCap='square'))
-
-    # # Build the PDF
-    # doc.build(elements)
-   
-
-
-def replace_taxonomy_id_w_descr(df):
+def replace_taxonomy_id_w_descr(df):   # use string id rather than number
     df['Scene Classification'] = df['Scene Classification'].replace(taxonomy_Dict)
 
 # Function to format a float as a percentage
 def format_as_percentage(value):
-    return f'{value * 100:.0f}%'
-
+    return f'{value * 100:.0f}'
+    # return f'{value * 100:.0f}%' removed to just get integer
 # Function to convert mac epoch to time
 def mac_absolute_time_to_datetime(mac_time):
     mac_epoch = datetime(2001, 1, 1, 0, 0, 0)
     dt = mac_epoch + timedelta(seconds=mac_time)
     dt = dt.replace(microsecond=0)
     return str(dt) + " UTC"
-def photo_taxonomy(photosqlitepath):
+def photo_taxonomy(photosqlitepath):        # query photo db to get scene descriptions
     sqlite_file = photosqlitepath
     if sqlite_file is None:
         print("The 'photos.sqlite' file was not found in the specified folder or its subfolders.")
@@ -358,8 +300,6 @@ def sqlite_run_SMS(SMSdbPath):
     connection.close()
     return results
 
-
-
 def sqlite_run_accounts3(accounts3path):
     connection = sqlite3.connect(accounts3path)
     cursor = connection.cursor()
@@ -390,7 +330,6 @@ def sqlite_run_accounts3(accounts3path):
     results_with_headers = [column_headers] + results
 
     return results_with_headers
-
 
 def sqlite_run_addressbook(addressbookpath):
     connection = sqlite3.connect(addressbookpath)
@@ -546,7 +485,7 @@ def retrieve_files_from_backup(backup_path, filedestination, password):
     # X addressbook_sqlitedb = "31bb7ba8914766d4ba40d6dfb6113c8b614be442"
     # X accounts3_sqlite = "943624fd13e27b800cc6d9ce1100c22356ee365c"
     # voicemail_db = "992df473bbb9e132f4b3b6e4d33f72171e97bc7a"  # can we do transcripts?
-    # X sms_db = "3d0d7e5fb2ce288813306e4d4636395e047a3d28"  # giant csv? need to convert times
+    # X sms_db = "3d0d7e5fb2ce288813306e4d4636395e047a3d28"  # giant csv? pdf takes forever
     # TCC_db = "64d0019cb3d46bfc8cce545a8ba54b93e7ea9347"  # limit to access to camera, microphone, photos, 
     # callhistory_sqlite = "5a4935c78a5255723f707230a451d79c540d2741"
     # safari_sqlite = "e74113c185fd8297e140cfcf9c99436c5cc06b57"  ?
@@ -556,10 +495,7 @@ def retrieve_files_from_backup(backup_path, filedestination, password):
                     "64d0019cb3d46bfc8cce545a8ba54b93e7ea9347", "5a4935c78a5255723f707230a451d79c540d2741"]
 
     backup = Backup.from_path(backup_path=backup_path, password=password)
-    # try:
-    #     testout = backup.unback("D:\\TESTOUTPUT")
-    # except OSError:
-    #     print("OS error on unpacking a folder")
+    
     for ID in list_of_fileIDs:
         try:
             backupd_plist = backup.extract_file_id(ID,path=filedestination)
@@ -600,8 +536,6 @@ retrieve_files_from_backup(backup_path=backup_path, filedestination=fileoutputde
 
 recovered_files = os.listdir(fileoutputdestination)
 
-# testhash = calculate_itunes_photofile_name('DCIM/104APPLE/IMG_4342.JPG')
-# print(testhash)
 for artifact in recovered_files:
     # print(artifact)
     if "Accounts3" in artifact:
@@ -609,33 +543,33 @@ for artifact in recovered_files:
         # print(accountdata)
         accourntquery = sqlite_run_accounts3(accountdata)
         # print(accourntquery)
-        make_portrait_report(outputfolder=fileoutputdestination, report_title="Accounts",sqlqueryresult=accourntquery)
+        make_portrait_report(outputfolder=reportoutputdestination, report_title="Accounts",sqlqueryresult=accourntquery)
     
     if "AddressBook.sqlitedb" in artifact:
         accountdata = os.path.join(fileoutputdestination + '\\' + artifact)
         addressquery = sqlite_run_addressbook(accountdata) 
         
-        make_landscape_report(outputfolder=fileoutputdestination, report_title="Address Book",sqlqueryresult=addressquery)
+        make_landscape_report(outputfolder=reportoutputdestination, report_title="Address Book",sqlqueryresult=addressquery)
     
     if 'CallHistory.storedata' in artifact:
         accountdata = os.path.join(fileoutputdestination + '\\' + artifact)
         callquery = sqlite_run_callhistory(accountdata) 
         # print(callquery)
-        make_portrait_report(outputfolder=fileoutputdestination, report_title="Call History",sqlqueryresult=callquery)
+        make_portrait_report(outputfolder=reportoutputdestination, report_title="Call History",sqlqueryresult=callquery)
     if 'DataUsage.sqlite' in artifact:
         accountdata = os.path.join(fileoutputdestination + '\\' + artifact)
         datausequery = sqlite_run_datausage(accountdata) 
         # print(datausequery)
-        make_landscape_report(outputfolder=fileoutputdestination, report_title="Data Usage",sqlqueryresult=datausequery)
+        make_landscape_report(outputfolder=reportoutputdestination, report_title="Data Usage",sqlqueryresult=datausequery)
     if "History.db" in artifact:
         accountdata = os.path.join(fileoutputdestination + '\\' + artifact)
         safariquery = sqlite_run_safarihistory(accountdata) 
         # print(safariquery)   
-        make_landscape_report(outputfolder=fileoutputdestination, report_title="Safari History",sqlqueryresult=safariquery)
+        make_landscape_report(outputfolder=reportoutputdestination, report_title="Safari History",sqlqueryresult=safariquery)
     if "sms.db" in artifact:
         accountdata = os.path.join(fileoutputdestination + '\\' + artifact)
         smsquery = sqlite_run_SMS(accountdata) 
-        make_landscape_report(outputfolder=fileoutputdestination, report_title="Messages",sqlqueryresult=smsquery,max_cell_width=25)
+        make_landscape_report(outputfolder=reportoutputdestination, report_title="Messages",sqlqueryresult=smsquery,max_cell_width=25)
 
 
         # print(smsquery)
@@ -643,19 +577,23 @@ for artifact in recovered_files:
         accountdata = os.path.join(fileoutputdestination + '\\' + artifact)
         tccquery = sqlite_run_TCC(accountdata) 
         # print(tccquery)
-        make_portrait_report(outputfolder=fileoutputdestination, report_title="App Permissions",sqlqueryresult=tccquery)
+        make_portrait_report(outputfolder=reportoutputdestination, report_title="App Permissions",sqlqueryresult=tccquery)
     if "Photos.sqlite" in artifact:
         
         accountdata = os.path.join(fileoutputdestination + '\\' + artifact)
         taxonomyquery = photo_taxonomy(accountdata)
-        
-        filtered_df = taxonomyquery[taxonomyquery['Scene Classification'] == target]
+        taxonomyquery['Confidence'] = pd.to_numeric(taxonomyquery['Confidence'], errors='coerce')
+        # finds target search term and confidence level increased to avoid false positives
+        filtered_df = taxonomyquery[(taxonomyquery['Scene Classification'] == target) & (taxonomyquery['Confidence'] > 25)] 
+        print(filtered_df) 
+        #gets the image file path
         pathdf = (filtered_df['Path'] + '/' + filtered_df['Filename'])
         for thing in pathdf:
+            #converts the path to sha1 hash in backup
             fileid = calculate_itunes_photofile_name(thing)
             list_of_paths.append(fileid)
 
-        # retrieve_photos_from_backup(backup_path=backup_path, filedestination=photooutputdestination, password=password,list_of_fileIDs=list_of_paths)
+        retrieve_photos_from_backup(backup_path=backup_path, filedestination=photooutputdestination, password=password,list_of_fileIDs=list_of_paths)
 
 end = time.process_time() - start
 print(end)

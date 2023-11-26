@@ -1,6 +1,6 @@
+import argparse
 from pyiosbackup import Backup
 import plistlib
-
 import sqlite3
 import os
 from datetime import datetime, timedelta
@@ -18,28 +18,6 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.enums import TA_LEFT, TA_RIGHT, TA_CENTER, TA_JUSTIFY
 from reportlab.pdfgen import canvas 
 from reportlab.platypus.flowables import KeepTogether
-
-start = time.process_time()   # for testing
-
-
-    # Iterate over backup to find all image and video files. 
-    # Identify interesting artifacts, get their file id and 
-    # pull those files from the backup. 
-    # Is there even a need to unpack the whole backup????
-    # parse info.plist for report data
-    # Safari history/download/autofill?
-reportoutputdestination = "D:\\TESTOUTPUT"
-fileoutputdestination = reportoutputdestination + "\\Artifacts"
-photooutputdestination = reportoutputdestination + '\\Photos'
-backup_path = "D:\\MITE_Cases\\TestRun_iPhone 12_Charlie Rubisoff_20231122141240\\Backups & Exports\\00008101-0008199926E9001E"
-info_plist_path = f'{backup_path}/Info.plist'
-password = "MITE"
-if os.path.isdir(reportoutputdestination) == False:
-    os.makedirs(reportoutputdestination)
-if os.path.isdir(photooutputdestination) == False:
-    os.makedirs(photooutputdestination)
-if os.path.isdir(fileoutputdestination) == False:
-    os.makedirs(fileoutputdestination)
 
 phonetype = ""
 devicename = ""
@@ -66,30 +44,32 @@ taxonomy_Dict = {
 1447: "vehicle",
 1632: "weapon"
 }
-target = 'teen'
+target = ''
 
 list_of_paths = []
 now = datetime.now()
+def parse_args():
+    parser = argparse.ArgumentParser(description="iOS Backup Analysis Script")
+    parser.add_argument("--backup-path", required=True, help="Path to the iOS backup directory")
+    parser.add_argument("--password", required=True, help="Password for the iOS backup")
+    parser.add_argument("--report-output-destination", default="D:\\TESTOUTPUT", help="Output directory for reports")
+    parser.add_argument("--target", default="", help="Target search term for photo classification")
+
+    return parser.parse_args()
 
 def parse_info_plist(file_path):
     try:
         with open(file_path, 'rb') as plist_file:
             plist_data = plistlib.load(plist_file)
-            global phonetype
-            phonetype = (plist_data['Product Type'])
-            global devicename
-            devicename = (plist_data['Device Name'])
-            global imei
-            imei = (plist_data['IMEI'])
-            global phonenum
-            phonenum = (plist_data['Phone Number'])
-            global serialnum
-            serialnum = (plist_data['Serial Number'])
-            
+            global phonetype, devicename, imei, phonenum, serialnum
+            phonetype = plist_data.get('Product Type', '')
+            devicename = plist_data.get('Device Name', '')
+            imei = plist_data.get('IMEI', '')
+            phonenum = plist_data.get('Phone Number', '')
+            serialnum = plist_data.get('Serial Number', '')
     except Exception as e:
         print(f"Error: {e}")
-        return None
-parse_info_plist(info_plist_path) 
+
 def make_portrait_report(outputfolder, report_title, sqlqueryresult):
     # Start with raw text reports for large output
 
@@ -143,9 +123,6 @@ def make_portrait_report(outputfolder, report_title, sqlqueryresult):
     table.setStyle(table_style)
     elements.append(table)
 
-    # Add border
-    elements.append(HRFlowable(width=w, thickness=t, color=c, spaceBefore=2, vAlign='MIDDLE', lineCap='square'))
-
     # Build the PDF
     doc.build(elements)
 
@@ -181,12 +158,6 @@ def make_landscape_report(outputfolder, report_title, sqlqueryresult, max_cell_w
     elements.append(Paragraph("<i><font color='Darkslategray'>{}</font></i>".format(report_title), styleH))
     elements.append(Paragraph(" ", styleN))
    
-
-    # Add date/time
-    
-    
-  
-
     # Create a table and add it to the elements
     table_data = [[Paragraph(truncate_text(str(cell), max_cell_width), styleN) for cell in row] for row in sqlqueryresult]
 
@@ -209,9 +180,6 @@ def make_landscape_report(outputfolder, report_title, sqlqueryresult, max_cell_w
     # Apply the table style
     table.setStyle(table_style)
     elements.append(table)
-
-    # Add border
-    elements.append(HRFlowable(width=w, thickness=t, color=c, spaceBefore=2, vAlign='MIDDLE', lineCap='square'))
 
     # Build the PDF
     doc.build(elements)
@@ -297,8 +265,11 @@ def sqlite_run_SMS(SMSdbPath):
                 order by 'Message Date (UTC)' desc"""
     cursor.execute(smsQuery)
     results = cursor.fetchall()
+     # Convert the results to a DataFrame
+    columns = [description[0] for description in cursor.description]
+    df = pd.DataFrame(results, columns=columns)
     connection.close()
-    return results
+    return results, df
 
 def sqlite_run_accounts3(accounts3path):
     connection = sqlite3.connect(accounts3path)
@@ -507,7 +478,7 @@ def retrieve_files_from_backup(backup_path, filedestination, password):
                 # Handle other types of exceptions
                 print(f"An unexpected exception occurred: {e}")
 
-def calculate_itunes_photofile_name(filepathinbackup):
+def calculate_itunes_photofile_name(filepathinbackup):      #converts path to sha1 used in backup file name
     builtpath = ('CameraRollDomain-Media/' + filepathinbackup)
     builtpath = builtpath.encode(encoding='UTF-8', errors='strict')
     filehash = sha1(builtpath).hexdigest()
@@ -531,69 +502,85 @@ def retrieve_photos_from_backup(backup_path, filedestination, password, list_of_
                 # Handle other types of exceptions
                 print(f"An unexpected exception occurred: {e}")
 
+def save_to_csv(data_frame, csv_filename, additional_text=None):
+    if additional_text is not None:
+        with open(csv_filename, 'w') as file:
+            file.write(f"{additional_text}\n")
 
-retrieve_files_from_backup(backup_path=backup_path, filedestination=fileoutputdestination, password=password)
+    data_frame.to_csv(csv_filename, mode='a', index=False, header=additional_text is None)
+    print(f"Data saved to {csv_filename}")
 
-recovered_files = os.listdir(fileoutputdestination)
+if __name__ == "__main__":
+    args = parse_args()
+    backup_path = args.backup_path
+    password = args.password
+    reportoutputdestination = args.report_output_destination
+    taxonomy_target = args.target
+    fileoutputdestination = reportoutputdestination + "\\Artifacts"
+    photooutputdestination = reportoutputdestination + '\\Photos'
+    info_plist_path = f'{backup_path}/Info.plist'
+    if not os.path.isdir(reportoutputdestination):
+        os.makedirs(reportoutputdestination)
+    if os.path.isdir(photooutputdestination) == False:
+        os.makedirs(photooutputdestination)
+    if os.path.isdir(fileoutputdestination) == False:
+        os.makedirs(fileoutputdestination)
+    parse_info_plist(os.path.join(backup_path, 'Info.plist'))
+    retrieve_files_from_backup(backup_path=backup_path, filedestination=os.path.join(reportoutputdestination, 'Artifacts'), password=password)
 
-for artifact in recovered_files:
-    # print(artifact)
-    if "Accounts3" in artifact:
-        accountdata = os.path.join(fileoutputdestination + '\\' + artifact)
-        # print(accountdata)
-        accourntquery = sqlite_run_accounts3(accountdata)
-        # print(accourntquery)
-        make_portrait_report(outputfolder=reportoutputdestination, report_title="Accounts",sqlqueryresult=accourntquery)
-    
-    if "AddressBook.sqlitedb" in artifact:
-        accountdata = os.path.join(fileoutputdestination + '\\' + artifact)
-        addressquery = sqlite_run_addressbook(accountdata) 
+    recovered_files = os.listdir(os.path.join(reportoutputdestination, 'Artifacts'))
+
+    list_of_paths = []
+    for artifact in recovered_files:
+        if "Accounts3" in artifact:
+            accountdata = os.path.join(reportoutputdestination, 'Artifacts', artifact)
+            accourntquery = sqlite_run_accounts3(accountdata)
+            make_portrait_report(outputfolder=reportoutputdestination, report_title="Accounts", sqlqueryresult=accourntquery)
         
-        make_landscape_report(outputfolder=reportoutputdestination, report_title="Address Book",sqlqueryresult=addressquery)
+        if "AddressBook.sqlitedb" in artifact:
+            accountdata = os.path.join(fileoutputdestination + '\\' + artifact)
+            addressquery = sqlite_run_addressbook(accountdata)     
+            make_landscape_report(outputfolder=reportoutputdestination, report_title="Address Book",sqlqueryresult=addressquery)
     
-    if 'CallHistory.storedata' in artifact:
-        accountdata = os.path.join(fileoutputdestination + '\\' + artifact)
-        callquery = sqlite_run_callhistory(accountdata) 
-        # print(callquery)
-        make_portrait_report(outputfolder=reportoutputdestination, report_title="Call History",sqlqueryresult=callquery)
-    if 'DataUsage.sqlite' in artifact:
-        accountdata = os.path.join(fileoutputdestination + '\\' + artifact)
-        datausequery = sqlite_run_datausage(accountdata) 
-        # print(datausequery)
-        make_landscape_report(outputfolder=reportoutputdestination, report_title="Data Usage",sqlqueryresult=datausequery)
-    if "History.db" in artifact:
-        accountdata = os.path.join(fileoutputdestination + '\\' + artifact)
-        safariquery = sqlite_run_safarihistory(accountdata) 
-        # print(safariquery)   
-        make_landscape_report(outputfolder=reportoutputdestination, report_title="Safari History",sqlqueryresult=safariquery)
-    if "sms.db" in artifact:
-        accountdata = os.path.join(fileoutputdestination + '\\' + artifact)
-        smsquery = sqlite_run_SMS(accountdata) 
-        make_landscape_report(outputfolder=reportoutputdestination, report_title="Messages",sqlqueryresult=smsquery,max_cell_width=25)
+        if 'CallHistory.storedata' in artifact:
+            accountdata = os.path.join(fileoutputdestination + '\\' + artifact)
+            callquery = sqlite_run_callhistory(accountdata) 
+            # print(callquery)
+            make_portrait_report(outputfolder=reportoutputdestination, report_title="Call History",sqlqueryresult=callquery)
+        if 'DataUsage.sqlite' in artifact:
+            accountdata = os.path.join(fileoutputdestination + '\\' + artifact)
+            datausequery = sqlite_run_datausage(accountdata) 
+            # print(datausequery)
+            make_landscape_report(outputfolder=reportoutputdestination, report_title="Data Usage",sqlqueryresult=datausequery)
+        if "History.db" in artifact:
+            accountdata = os.path.join(fileoutputdestination + '\\' + artifact)
+            safariquery = sqlite_run_safarihistory(accountdata) 
+            # print(safariquery)   
+            make_landscape_report(outputfolder=reportoutputdestination, report_title="Safari History",sqlqueryresult=safariquery)
+        if "sms.db" in artifact:
+            accountdata = os.path.join(fileoutputdestination + '\\' + artifact)
+            smsquery, smsdf = sqlite_run_SMS(accountdata) 
+            if len(smsquery) < 5000:
+                make_landscape_report(outputfolder=reportoutputdestination, report_title="Messages",sqlqueryresult=smsquery,max_cell_width=25)
+            else:
+                save_to_csv(smsdf, reportoutputdestination + '\\MITE_iOS_Report_Messages_' + datetime.now().strftime("%Y%m%d%H%M%S") + '.csv') #,additional_text="Device: " +phonetype + " Serial Number: " + serialnum)
+            # print(smsquery)
+        if "TCC.db" in artifact:
+            accountdata = os.path.join(fileoutputdestination + '\\' + artifact)
+            tccquery = sqlite_run_TCC(accountdata) 
+            # print(tccquery)
+            make_portrait_report(outputfolder=reportoutputdestination, report_title="App Permissions",sqlqueryresult=tccquery)
 
+        if "Photos.sqlite" in artifact:
+            accountdata = os.path.join(reportoutputdestination, 'Artifacts', artifact)
+            taxonomyquery = photo_taxonomy(accountdata)
+            taxonomyquery['Confidence'] = pd.to_numeric(taxonomyquery['Confidence'], errors='coerce')
+            filtered_df = taxonomyquery[(taxonomyquery['Scene Classification'] == taxonomy_target) & (taxonomyquery['Confidence'] > 20)] 
+            pathdf = (filtered_df['Path'] + '/' + filtered_df['Filename'])
+            for thing in pathdf:
+                fileid = calculate_itunes_photofile_name(thing)
+                list_of_paths.append(fileid)
 
-        # print(smsquery)
-    if "TCC.db" in artifact:
-        accountdata = os.path.join(fileoutputdestination + '\\' + artifact)
-        tccquery = sqlite_run_TCC(accountdata) 
-        # print(tccquery)
-        make_portrait_report(outputfolder=reportoutputdestination, report_title="App Permissions",sqlqueryresult=tccquery)
-    if "Photos.sqlite" in artifact:
-        
-        accountdata = os.path.join(fileoutputdestination + '\\' + artifact)
-        taxonomyquery = photo_taxonomy(accountdata)
-        taxonomyquery['Confidence'] = pd.to_numeric(taxonomyquery['Confidence'], errors='coerce')
-        # finds target search term and confidence level increased to avoid false positives
-        filtered_df = taxonomyquery[(taxonomyquery['Scene Classification'] == target) & (taxonomyquery['Confidence'] > 25)] 
-        print(filtered_df) 
-        #gets the image file path
-        pathdf = (filtered_df['Path'] + '/' + filtered_df['Filename'])
-        for thing in pathdf:
-            #converts the path to sha1 hash in backup
-            fileid = calculate_itunes_photofile_name(thing)
-            list_of_paths.append(fileid)
+            retrieve_photos_from_backup(backup_path=backup_path, filedestination=os.path.join(reportoutputdestination, 'Photos'), password=password, list_of_fileIDs=list_of_paths)
 
-        retrieve_photos_from_backup(backup_path=backup_path, filedestination=photooutputdestination, password=password,list_of_fileIDs=list_of_paths)
-
-end = time.process_time() - start
-print(end)
+    print("Done.")

@@ -11,6 +11,7 @@
 import streamlit as st
 from tokenize import group
 import os
+import subprocess
 from subprocess import PIPE, run, Popen, CREATE_NO_WINDOW, check_output
 import time
 import datetime
@@ -30,6 +31,7 @@ from reportlab.platypus.flowables import KeepTogether
 # from android_backup import AndroidBackup, CompressionType, EncryptionType
 import MITE_ADB
 import imghdr
+import json
 # from android_backup import AndroidBackup, CompressionType, EncryptionType
 import tarfile
 from abc import ABC, abstractmethod
@@ -53,7 +55,7 @@ now = datetime.datetime.now()
 if sys.platform == "darwin":                                   
     adb = "./Support_Files/adb"
 if sys.platform == "win32" or sys.platform == "win64":
-    adb = "./Support_Files/adb.exe"
+    adb = ".\\Support_Files\\adb.exe"
 
 #################   GLOBAL VARIABLES    ################
 
@@ -500,7 +502,7 @@ def make_backup(destination_folder, caseNumber):
 def android_screenshot():
     if len(casenum) != 0:
         try:
-            os.makedirs("D:/MITE_Cases/" + casenum + "/Screenshots")
+            os.makedirs(report_root + "/MITE_Cases/" + casenum + "/Screenshots")
         except FileExistsError:
             pass
          # ADB command to capture the screenshot
@@ -513,16 +515,16 @@ def android_screenshot():
         # Check if the ADB command executed successfully
         if process.returncode == 0:
             # Save the screenshot data to a file on your computer
-            with open("D:/MITE_Cases/" + casenum + "/Screenshots/Screenshot_" +stamp +".png", "wb") as file:
+            with open(report_root + "/MITE_Cases/" + casenum + "/Screenshots/Screenshot_" +stamp +".png", "wb") as file:
                 file.write(screenshot_data)
             print("Screenshot saved successfully.")
         else:
             print("Failed to capture the screenshot.")
         with status_message:
-            st.info("D:/MITE_Cases/" + casenum + "/Screenshots/Screenshot_" +stamp +".png created and added to case folder.")
+            st.info(report_root + "/MITE_Cases/" + casenum + "/Screenshots/Screenshot_" +stamp +".png created and added to case folder.")
     else:
         try:
-            os.makedirs("D:/MITE_Cases/Screenshots/")
+            os.makedirs(report_root + "/MITE_Cases/Screenshots/")
         except FileExistsError:
             pass
 
@@ -536,13 +538,13 @@ def android_screenshot():
         # Check if the ADB command executed successfully
         if process.returncode == 0:
             # Save the screenshot data to a file on your computer
-            with open("D:/MITE_Cases/Screenshots/Screenshot_" + stamp + ".png", "wb") as file:
+            with open(report_root + "/MITE_Cases/Screenshots/Screenshot_" + stamp + ".png", "wb") as file:
                 file.write(screenshot_data)
             print("Screenshot saved successfully.")
         else:
             print("Failed to capture the screenshot.")
         with status_message:
-            st.info("D:/MITE_Cases/Screenshots/Screenshot_" + stamp + ".png created and added to case folder.")
+            st.info(report_root + "/MITE_Cases/Screenshots/Screenshot_" + stamp + ".png created and added to case folder.")
     
 def get_Storage_size():
     howBigIsStorage = Popen([adb, "shell", "du", "-d 1", "-hc", "/storage"], stdout=PIPE, creationflags=CREATE_NO_WINDOW)
@@ -572,22 +574,89 @@ def get_Storage_size():
                         return stored_size
 
 def pull_storage_data(destination_folder, caseNumber):
-    global pull_folder
-    pull_folder = destination_folder + "/Mite_Backup"
-    if os.path.isdir(pull_folder) == False:
+    pull_folder = os.path.join(destination_folder, "Mite_Backup")
+    if not os.path.isdir(pull_folder):
         os.makedirs(pull_folder)
-    backup_file = pull_folder + "/" + caseNumber + "_Storage.tar" 
-    unpack_fold = pull_folder + "/UnpackedData"
-    if os.path.isdir(unpack_fold) == False:
+
+    backup_file = os.path.join(pull_folder, f"{caseNumber}_Storage.tar")
+    unpack_fold = os.path.join(pull_folder, "UnpackedData")
+    if not os.path.isdir(unpack_fold):
         os.makedirs(unpack_fold)
+   
     with update_msg:
-        with st.spinner("Pulling storage data..."): 
-            pullit = run([adb, "pull", "-a","/storage", unpack_fold], shell=True, creationflags=CREATE_NO_WINDOW)  # the -a keeps timestamps        
+        with st.spinner("Pulling storage data..."):
+           
+            get_pull_folders = run([adb, 'shell', 'ls', 'storage'],stdout=subprocess.PIPE,  # this code pulls the Storage subfolders and handles unique ids for SD cards
+            stderr=subprocess.PIPE,
+            text=True,  # Use text=True for string output, or omit for bytes
+            check=True  # Raise an exception if the command returns a non-zero exit code
+            )
+            storage_subfolders_onphone = get_pull_folders.stdout.splitlines()
+            
+            for d in storage_subfolders_onphone:
+                try:
+                    pullit = run([adb, "pull", "-a", "/storage/"+ d, unpack_fold + '/storage'], shell=True, creationflags=CREATE_NO_WINDOW, check=True)
+                except subprocess.CalledProcessError as e:
+                    st.error(f"Error pulling storage data: {e}") 
+                    pass
+            try:   
+                pullself = run([adb, "pull", "-a", "/storage/self/primary/DCIM", unpack_fold + '/self/primary/DCIM'], shell=True, creationflags=CREATE_NO_WINDOW, check=True)
+            except subprocess.CalledProcessError as e:
+                st.error(f"Error pulling storage data: {e}")
+                pass
+            try:    
+                pullemulated = run([adb, "pull", "-a", "/storage/emulated/0/DCIM", unpack_fold + 'emulated/0/DCIM'], shell=True, creationflags=CREATE_NO_WINDOW, check=True)
+            except subprocess.CalledProcessError as e:
+                st.error(f"Error pulling storage data: {e}")
+                pass
+
     with tarfile.open(backup_file, "w") as archive:
         archive.add(unpack_fold, recursive=True)
+
     return backup_file
+def get_all_files_and_pull(output_folder):
+    """
+    Get all file paths on the Android device and pull them to a local folder.
+
+    Args:
+        device_folder (str): Path on the Android device to start listing files.
+        local_folder (str): Local folder to store pulled files.
+    """
+    # Create the local folder if it doesn't exist
+    os.makedirs(output_folder, exist_ok=True)
+
+    try:
+        
+        # Pull each file to the local folder
+        for file_path in Master_file_list:
+            # Normalize file path and extract the file name
+            # file_path = file_path.strip()
+            # file_name = os.path.basename(file_path)
+
+            # Construct the local file path
+            local_file_path = os.path.join(output_folder, file_path)
+
+            # Pull the file using adb pull
+            subprocess.run(["adb", "pull", file_path, local_file_path], shell=True, creationflags=CREATE_NO_WINDOW, check=True)
+            # print(f"Successfully pulled: {file_path} to {local_file_path}")
+
+    except subprocess.CalledProcessError as e:
+        print(f"Error: {e}")
 
 #############       Mighty land of functions        ##################
+def work_site():                #cause script to execute in directory containing script
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))  #move to dir that holds this script and ADB (need to change for exe)
+    global pwd
+    pwd = os.path.dirname(os.path.abspath(__file__))
+def get_report_settings():
+    with open(pwd + "/Support_Files/last.config", "r") as last_input:
+        content = last_input.read()
+        result_dict = json.loads(content)
+        last_inv = result_dict["Examiner"]
+        last_agency = result_dict["Organization"]
+        last_ReportFolder = result_dict["Report Location"]
+    return last_inv, last_agency, last_ReportFolder
+ 
 def add_logo():     #Places MITE logo in upper left
     st.sidebar.markdown(
         """
@@ -655,11 +724,7 @@ def gallery_view(folder):   #Thumbnail gallery presentation
 
         else:
             break
-def work_site():                #cause script to execute in directory containing script
-    
-    os.chdir(os.path.dirname(os.path.abspath(__file__)))  #move to dir that holds this script and ADB (need to change for exe)
-    global pwd
-    pwd = os.path.dirname(os.path.abspath(__file__))
+
 def store_new_user_inputs(old_user_entries):    #Keeps user inputs for form fields
     if old_user_entries[0] != inv:
         old_user_entries[0] = inv
@@ -883,7 +948,7 @@ def make_report_folders():
     global Case_Folder
     # changed to use Windows user's documents folder
     # Case_Folder = (str(pwd) + '/Cases/' + str(casenum) + "_" + dev_Name + "_" + stamp) 
-    Case_Folder = ('D:/MITE_Cases/' + str(casenum) + "_" + dev_Name + "_" + stamp) 
+    Case_Folder = (report_root + '/MITE_Cases/' + str(casenum) + "_" + dev_Name + "_" + stamp) 
 
     os.makedirs(Case_Folder)
     os.makedirs(str(Case_Folder) + '/Raw_Reports')
@@ -1224,8 +1289,9 @@ def show_triage_results():
         st.markdown("---")
 
 #####   OPENING FUNCTIONS   #####
-
-work_site()             
+work_site() 
+inv_name, agency_name, report_root = get_report_settings()       
+print(inv_name, agency_name, report_root)     
 opening_processes()
 run([adb, 'start-server'], stdout=PIPE, stderr=PIPE, universal_newlines=True, creationflags=CREATE_NO_WINDOW)
 
@@ -1265,9 +1331,6 @@ if connected_to_Device == True:
         st.error("Reconnect unlocked device and try again.")
     
     get_profiles()
-    Last_Used = access_user_inputs()
-    inv_name = Last_Used[0]
-    agency_name = Last_Used[1]
     Dev_properties()
     
     service_IDs = MITE_ADB.service_call_for_IDs()
@@ -1290,7 +1353,7 @@ if connected_to_Device == True:
     storeMBsize = str(0)
     pull_storage = st.sidebar.checkbox("Pull Storage Areas", disabled=False)
     # storeMBsize = st.text("User Storage Selected for Pull - " + str(get_Storage_size()))
-    UNPACK = st.sidebar.checkbox("Attempt to Unpack ADB Backup", value=True)
+    # UNPACK = st.sidebar.checkbox("Attempt to Unpack ADB Backup", value=True)
     TRIAGE = st.sidebar.button("Begin Triage",)
     st.sidebar.markdown("---")
     st.sidebar.write("Capture Device Screen")
@@ -1370,55 +1433,55 @@ if connected_to_Device == True:
                     folder = make_backup_folder(Case_Folder)
                 if adb_check == True:
                     backed_up = make_backup(BACKUP_Folder, casenum)
-                
+              
                 if pull_storage == True:
                     pulled_store = pull_storage_data(BACKUP_Folder, casenum)
                 
 
-                if UNPACK == True:
-                    if adb_check == True:
-                        unpack_to_dis = back_folder + "/UnpackedData"
-                        tar_version = backed_up + ".tar"
-                    if pull_storage == True:
-                        unpack_pull = pull_folder + "/UnpackedData"
-                        pull_tar_version = pulled_store
+                # if UNPACK == True:
+                #     if adb_check == True:
+                #         unpack_to_dis = back_folder + "/UnpackedData"
+                #         tar_version = backed_up + ".tar"
+                #     if pull_storage == True:
+                #         unpack_pull = pull_folder + "/UnpackedData"
+                #         pull_tar_version = pulled_store
                     
-                    try:
-                        with update_msg:
-                            with st.spinner("Unpacking Backup to .tar file..."):
-                                with open(backed_up, "rb") as ab:
-                                    with open(tar_version, "wb") as tar:
-                                        decrypt_android_backup(in_stream=ab, out_stream=tar, pw_callback=get_password)
-                                try:
-                                    with update_msg:    
-                                        with st.spinner("Unpacking .tar file to folders..."):
-                                            if tarfile.is_tarfile(tar_version) == True:
-                                                with tarfile.open(tar_version) as f:
-                                                    f.extractall(path=unpack_to_dis) 
-                                except tarfile.ReadError:
-                                    print("tar file read error")
-                                    pass
-                                except NotADirectoryError:
-                                    with update_msg:
-                                        st.error("Error unpacking Android backup. Seek other tools for analysis")
-                                        pass
-                    except NameError:       # occurs when adb backup not run
-                        pass
-                    except AssertionError: 
-                        st.error("There was an error unpacking the backup. Use an alternative tool to review the collected data.")
-                    try:
-                        with update_msg:
-                            with st.spinner("Unpacking .tar file to folders..."):
-                                if tarfile.is_tarfile(pull_tar_version) == True:
-                                    if not "Storage" in pull_tar_version:
-                                        with tarfile.open(pull_tar_version) as f:
-                                            f.extractall(path=unpack_to_dis) 
-                    except tarfile.ReadError:
-                        print("tar file read error")
-                        pass
-                    except NameError:
-                        print("pull not selected - passing")
-                        pass
+                #     try:
+                #         with update_msg:
+                #             with st.spinner("Unpacking Backup to .tar file..."):
+                #                 with open(backed_up, "rb") as ab:
+                #                     with open(tar_version, "wb") as tar:
+                #                         decrypt_android_backup(in_stream=ab, out_stream=tar, pw_callback=get_password)
+                #                 try:
+                #                     with update_msg:    
+                #                         with st.spinner("Unpacking .tar file to folders..."):
+                #                             if tarfile.is_tarfile(tar_version) == True:
+                #                                 with tarfile.open(tar_version) as f:
+                #                                     f.extractall(path=unpack_to_dis) 
+                #                 except tarfile.ReadError:
+                #                     print("tar file read error")
+                #                     pass
+                #                 except NotADirectoryError:
+                #                     with update_msg:
+                #                         st.error("Error unpacking Android backup. Seek other tools for analysis")
+                #                         pass
+                #     except NameError:       # occurs when adb backup not run
+                #         pass
+                #     except AssertionError: 
+                #         st.error("There was an error unpacking the backup. Use an alternative tool to review the collected data.")
+                #     try:
+                #         with update_msg:
+                #             with st.spinner("Unpacking .tar file to folders..."):
+                #                 if tarfile.is_tarfile(pull_tar_version) == True:
+                #                     if not "Storage" in pull_tar_version:
+                #                         with tarfile.open(pull_tar_version) as f:
+                #                             f.extractall(path=unpack_to_dis) 
+                #     except tarfile.ReadError:
+                #         print("tar file read error")
+                #         pass
+                #     except NameError:
+                #         print("pull not selected - passing")
+                #         pass
 
     if screenshot == True:
         android_screenshot()

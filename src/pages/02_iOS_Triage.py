@@ -4,7 +4,7 @@
 #   Storage Space
 #   Backup include full designation
 
-
+import json
 from pymobiledevice3.lockdown import create_using_usbmux 
 from pymobiledevice3.services import installation_proxy, screenshot
 from pymobiledevice3.services.afc import AfcService, AfcShell
@@ -68,13 +68,21 @@ hide_streamlit_style = """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True) 
 
 update_msg = st.empty()
-  
+ 
 def work_site():                #cause script to execute in directory containing script
     
     os.chdir(os.path.dirname(os.path.abspath(__file__)))  #move to dir that holds this script and ADB (need to change for exe)
     global pwd
     pwd = os.path.dirname(os.path.abspath(__file__))
-work_site()    
+    
+def get_report_settings():
+    with open("../Support_Files/last.config", "r") as last_input:
+        content = last_input.read()
+        result_dict = json.loads(content)
+        last_inv = result_dict["Examiner"]
+        last_agency = result_dict["Organization"]
+        last_ReportFolder = result_dict["Report Location"]
+    return last_inv, last_agency, last_ReportFolder
 
 
 
@@ -280,7 +288,7 @@ else:
     def make_report_folders():
         
         global Case_Folder
-        Case_Folder = ('D:/MITE_Cases/' + str(casenum) + "_" + device_Model + "_" + device_Name + "_" + stamp) 
+        Case_Folder = (report_root + '/MITE_Cases/' + str(casenum) + "_" + device_Model + "_" + device_Name + "_" + stamp) 
         os.makedirs(Case_Folder)
         os.makedirs(str(Case_Folder) + '/Backups & Exports')
         os.makedirs(str(Case_Folder) + '/Reports')
@@ -293,15 +301,18 @@ else:
         with open(folder + '/Reports/' + device_Model + '_' + now.strftime(" %Y%m%d%H%M%S") + '_Media_File_List.txt', 'w', encoding='utf-8') as file_report:
             file_report.write('Case Number: ' + casenum +'\n\n')
             file_report.write('Device Name: ' + device_Model +'\n\n')
-            file_report.write('IMEI:        ' + IMEI +'\n\n')
+           
+            file_report.write('Serial No.:        ' + serial_Number +'\n\n')
+           
             file_report.write('Files stored at var/mobile/Media:\n\n')
             for ele in file_Listing:
                 file_report.write(ele + '\n')
         with open(folder +'/Reports/' + device_Model + '_' + now.strftime(" %Y%m%d%H%M%S") + '_Application_List.txt', 'w') as app_report:
             app_report.write('Case Number: ' + casenum +'\n\n' )
             app_report.write('Device Name: ' + device_Model +'\n\n')
-            app_report.write('IMEI:        ' + IMEI +'\n\n')
-
+            
+            app_report.write('Serial No.:        ' + serial_Number +'\n\n')
+            
             app_report.write('Installed 3rd Party Applications\n\n')
             for op in app_Listing:
                 app_report.write(op + '\n') 
@@ -358,7 +369,10 @@ else:
         elements.append(Paragraph("<i><font color='Darkslategray'>Device Model: </font></i>" + device_Model, styleN))
         elements.append(Paragraph("<i><font color='Darkslategray'>Device Name: </font></i>" + device_Name, styleN))
         elements.append(Paragraph("<i><font color='Darkslategray'>Device Serial: </font></i>" + serial_Number, styleN))
-        elements.append(Paragraph("<i><font color='Darkslategray'>IMEI: </font></i>" + IMEI, styleN))
+        try:
+            elements.append(Paragraph("<i><font color='Darkslategray'>IMEI: </font></i>" + IMEI, styleN))
+        except TypeError:
+            pass
         elements.append(Paragraph("<i><font color='Darkslategray'>iOS Version: </font></i>" + iOSversion, styleN))
 
         elements.append(Paragraph(" ", styleN))
@@ -478,7 +492,9 @@ else:
         for profs in os.listdir(pathtoprofiles):
             if not profs.startswith("."):
                 profile_list.append(profs)
-
+    
+    work_site()
+    get_report_settings()
     get_profiles()
     Lockdown_Identifiers()
     identifiers_view()
@@ -499,14 +515,14 @@ else:
     def ios_backup(store_location):
             
         backup_client = Mobilebackup2Service(lock_Handshake)
-
-        #   Try to enable encrypted backup
-        backup_client.change_password(backup_directory=store_location,new="MITE")
-
+     
+        # #   Try to enable encrypted backup
+        # backup_client.change_password(backup_directory=store_location,new="1234")
+        
         
         time.sleep(3)
         backup_client.backup(full=True, backup_directory=store_location)
-
+       
         # try:
         #     backup_client.unback(backup_directory=(backuplocation + "/UnpackedData/"))   MOVED TO PREVIEW AREA
         # except Exception:
@@ -522,42 +538,16 @@ else:
 
         
         OsTraceService(lockdown=lock_Handshake).collect(save_log_to, size_limit=size_limit, age_limit=age_limit, start_time=start_time)
-    def access_user_inputs():       #   Function to read user last input for name agency & case folder fields
-        try:
-            with open(os.path.dirname(pwd) + "/Support_Files/last.config", "r") as last_input:       # List layout = ['Investigator:', 'Agency:', 'CaseFolder:']
-                inputs = last_input.readline()
-                inputs = inputs.split(",")
-                last_inv = inputs[0]
-                last_agency = inputs[1]
-                last_CaseFolder = inputs[2] 
-        except IndexError:                      #   if the last.config file gets corrupted this resets it as empty
-            with open(os.path.dirname(pwd) + "/Support_Files/last.config", "w") as last_input:
-                last_input.write(" , , ")
-                last_inv = ""
-                last_agency = ""
-                last_CaseFolder = ""
-        
-        return [last_inv, last_agency, last_CaseFolder]
-    def store_new_user_inputs(old_user_entries):    #Keeps user inputs for form fields
-        if old_user_entries[0] != inv:
-            old_user_entries[0] = inv
-        if old_user_entries[1] != agency:
-            old_user_entries[1] = agency
-
-        update_to_lastconfig = ",".join(old_user_entries)
-        with open(os.path.dirname(pwd) + "/Support_Files/last.config", "w") as new_input:  # points to parent dir of pwd
-            new_input.write(update_to_lastconfig)
+ 
 
     # def unpack_backup(backupfolder, unpacktothisfoler):                   # This got moved to preview area
     #     Mobilebackup2Service.unback(backup_directory=backupfolder, )
   
-
-    Last_Used = access_user_inputs()
+    inv, agency, report_root = get_report_settings() 
+    
 
     # Backup Checkboxes & Button
     casenum = st.sidebar.text_input(":red[Case Number*]", key="CASENUM", )
-    inv = Last_Used[0]
-    agency = Last_Used[1]
     profile = st.sidebar.selectbox("Triage Profile", profile_list)
     # unpackiOS = st.checkbox("Unpack iOS Backup to Folder Structure")
     triage_Data = st.sidebar.checkbox("Triage Data", value=True)

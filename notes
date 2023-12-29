@@ -6,3 +6,5 @@ Settings, - make default the user 'Documents' for windows install
 Add a button to open MITE Reports folder on each page
 
 Remove Streamlit from tab names
+
+FIXED - header row on SMS pdf doc
